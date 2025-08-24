@@ -1337,25 +1337,23 @@ public:
   static bool HandleBeastmasterCommand(ChatHandler *handler, const char *args);
 };
 
-// Define GetCommands outside the class body
-Acore::ChatCommands::ChatCommandTable BeastMaster_CommandScript::GetCommands() const
+// Adaptor functions must be at namespace (file) scope in C++; nested function
+// definitions inside GetCommands were causing "function definition is not allowed here" errors.
+namespace
 {
-  using namespace Acore::ChatCommands;
-
-  // Adaptor handlers (exact signature expected by ChatCommandBuilder)
-  static bool PetnameRenameAdaptor(ChatHandler * handler, char const *args)
+  static bool PetnameRenameAdaptor(ChatHandler *handler, char const *args)
   {
-    return HandlePetnameRenameCommand(handler, args ? args : "");
+    return BeastMaster_CommandScript::HandlePetnameRenameCommand(handler, args ? args : "");
   }
-  static bool PetnameCancelAdaptor(ChatHandler * handler, char const * /*args*/)
+  static bool PetnameCancelAdaptor(ChatHandler *handler, char const * /*args*/)
   {
-    return HandlePetnameCancelCommand(handler, "");
+    return BeastMaster_CommandScript::HandlePetnameCancelCommand(handler, "");
   }
-  static bool BeastmasterSummonAdaptor(ChatHandler * handler, char const *args)
+  static bool BeastmasterSummonAdaptor(ChatHandler *handler, char const *args)
   {
-    return HandleBeastmasterCommand(handler, args ? args : "");
+    return BeastMaster_CommandScript::HandleBeastmasterCommand(handler, args ? args : "");
   }
-  static bool BeastmasterReloadAdaptor(ChatHandler * handler, char const * /*args*/)
+  static bool BeastmasterReloadAdaptor(ChatHandler *handler, char const * /*args*/)
   {
     if (handler->GetSession() && handler->GetSession()->GetSecurity() < SEC_GAMEMASTER && !handler->IsConsole())
     {
@@ -1367,6 +1365,12 @@ Acore::ChatCommands::ChatCommandTable BeastMaster_CommandScript::GetCommands() c
     LOG_INFO("module", "Beastmaster: Reload triggered via .beastmaster reload");
     return true;
   }
+} // anonymous namespace (adaptors)
+
+// Define GetCommands outside the class body
+Acore::ChatCommands::ChatCommandTable BeastMaster_CommandScript::GetCommands() const
+{
+  using namespace Acore::ChatCommands;
 
   static ChatCommandTable petnameSub = {
       ChatCommandBuilder("rename", PetnameRenameAdaptor, SEC_PLAYER, Console::No),
@@ -1484,14 +1488,16 @@ bool BeastMaster_CommandScript::HandleBeastmasterCommand(
     handler->PSendSysMessage("Failed to summon the Beastmaster. Please contact an admin.");
   return true;
 }
-}
+// (Removed stray brace that incorrectly closed a non-open scope)
 
 class BeastmasterLoginNotice_PlayerScript : public PlayerScript
 {
 public:
-  BeastmasterLoginNotice_PlayerScript() : PlayerScript("BeastmasterLoginNotice_PlayerScript") {}
+  // Register for the login hook explicitly (new hook-based constructor style)
+  BeastmasterLoginNotice_PlayerScript()
+      : PlayerScript("BeastmasterLoginNotice_PlayerScript", {PLAYERHOOK_ON_LOGIN}) {}
 
-  void OnLogin(Player *player) override
+  void OnPlayerLogin(Player *player) override
   {
     if (!sConfigMgr->GetOption<bool>("BeastMaster.Enable", true))
       return;
