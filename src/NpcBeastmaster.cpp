@@ -1464,14 +1464,15 @@ bool BeastMaster_CommandScript::HandleBeastmasterCommand(
   if (npc)
   {
     handler->PSendSysMessage(
-        "The Beastmaster has arrived and will remain for 2 minutes.");
-  }
+      ChatCommandBuilder("rename", HandlePetnameRenameCommand, SEC_PLAYER, Console::No),
+      ChatCommandBuilder("cancel", HandlePetnameCancelCommand, SEC_PLAYER, Console::No)
+  };
+
   else
-  {
-    handler->PSendSysMessage(
-        "Failed to summon the Beastmaster. Please contact an admin.");
-  }
-  return true;
+    ChatCommandBuilder("reload",
+                       [](ChatHandler * handler, char const * /*args*/) "Failed to summon the Beastmaster. Please contact an admin.");
+}
+return true;
 }
 
 class BeastmasterLoginNotice_PlayerScript : public PlayerScript
@@ -1480,39 +1481,40 @@ public:
   BeastmasterLoginNotice_PlayerScript()
       : PlayerScript("BeastmasterLoginNotice_PlayerScript") {}
 
-  void OnLogin(Player *player)
+  void OnLogin(Player *player) {
+    ChatCommandBuilder("beastmaster", HandleBeastmasterCommand, SEC_PLAYER, Console::No),
+    ChatCommandBuilder("beastmaster", beastmasterSub),
+    ChatCommandBuilder("petname", petnameTable)
+  };
+  if (!sConfigMgr->GetOption<bool>("BeastMaster.Enable", true))
+    return;
+
+  // Optionally restrict to hunters if config says so
+  if (sConfigMgr->GetOption<bool>("BeastMaster.HunterOnly", true) &&
+      player->getClass() != CLASS_HUNTER)
+    return;
+
+  ChatHandler ch(player->GetSession());
+  std::string msg =
+      sConfigMgr->GetOption<std::string>("BeastMaster.LoginMessage", "");
+  if (!msg.empty())
+    ch.PSendSysMessage("%s", msg.c_str());
+  else
+    ch.PSendSysMessage("|cff00ff00[Beastmaster]|r Use |cff00ffff.bm|r or "
+                       "|cff00ffff.beastmaster|r to summon the Beastmaster "
+                       "NPC and manage your pets!");
+
+  // If player is a GM, show extra info
+  if (player->GetSession()->GetSecurity() >= SEC_GAMEMASTER)
   {
-    if (!sConfigMgr->GetOption<bool>("BeastMaster.ShowLoginNotice", true))
-      return;
-
-    if (!sConfigMgr->GetOption<bool>("BeastMaster.Enable", true))
-      return;
-
-    // Optionally restrict to hunters if config says so
-    if (sConfigMgr->GetOption<bool>("BeastMaster.HunterOnly", true) &&
-        player->getClass() != CLASS_HUNTER)
-      return;
-
-    ChatHandler ch(player->GetSession());
-    std::string msg =
-        sConfigMgr->GetOption<std::string>("BeastMaster.LoginMessage", "");
-    if (!msg.empty())
-      ch.PSendSysMessage("%s", msg.c_str());
-    else
-      ch.PSendSysMessage("|cff00ff00[Beastmaster]|r Use |cff00ffff.bm|r or "
-                         "|cff00ffff.beastmaster|r to summon the Beastmaster "
-                         "NPC and manage your pets!");
-
-    // If player is a GM, show extra info
-    if (player->GetSession()->GetSecurity() >= SEC_GAMEMASTER)
-    {
-      ch.PSendSysMessage(
-          "|cffffa500[GM Notice]|r You can also use |cff00ffff.npc add "
-          "601026|r to spawn the Beastmaster NPC anywhere, and "
-          "|cff00ffff.npc save|r to make it permanent.");
-    }
+    ch.PSendSysMessage(
+        "|cffffa500[GM Notice]|r You can also use |cff00ffff.npc add "
+        "601026|r to spawn the Beastmaster NPC anywhere, and "
+        "|cff00ffff.npc save|r to make it permanent.");
   }
-};
+}
+}
+;
 
 void Addmod_npc_beastmasterScripts()
 {
