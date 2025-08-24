@@ -1341,25 +1341,45 @@ public:
 Acore::ChatCommands::ChatCommandTable BeastMaster_CommandScript::GetCommands() const
 {
   using namespace Acore::ChatCommands;
+
+  // Adaptor handlers (exact signature expected by ChatCommandBuilder)
+  static bool PetnameRenameAdaptor(ChatHandler * handler, char const *args)
+  {
+    return HandlePetnameRenameCommand(handler, args ? args : "");
+  }
+  static bool PetnameCancelAdaptor(ChatHandler * handler, char const * /*args*/)
+  {
+    return HandlePetnameCancelCommand(handler, "");
+  }
+  static bool BeastmasterSummonAdaptor(ChatHandler * handler, char const *args)
+  {
+    return HandleBeastmasterCommand(handler, args ? args : "");
+  }
+  static bool BeastmasterReloadAdaptor(ChatHandler * handler, char const * /*args*/)
+  {
+    if (handler->GetSession() && handler->GetSession()->GetSecurity() < SEC_GAMEMASTER && !handler->IsConsole())
+    {
+      handler->PSendSysMessage("Insufficient privileges.");
+      return true;
+    }
+    sNpcBeastMaster->LoadSystem(true);
+    handler->PSendSysMessage("Beastmaster configuration & pet lists reloaded.");
+    LOG_INFO("module", "Beastmaster: Reload triggered via .beastmaster reload");
+    return true;
+  }
+
   static ChatCommandTable petnameSub = {
-      ChatCommandBuilder("rename", [](ChatHandler *h, char const *a) -> bool
-                         { return HandlePetnameRenameCommand(h, a ? a : ""); }, SEC_PLAYER, Console::No),
-      ChatCommandBuilder("cancel", [](ChatHandler *h, char const * /*a*/) -> bool
-                         { return HandlePetnameCancelCommand(h, ""); }, SEC_PLAYER, Console::No)};
+      ChatCommandBuilder("rename", PetnameRenameAdaptor, SEC_PLAYER, Console::No),
+      ChatCommandBuilder("cancel", PetnameCancelAdaptor, SEC_PLAYER, Console::No)};
+
   static ChatCommandTable beastmasterSub = {
-      ChatCommandBuilder("reload", [](ChatHandler *h, char const * /*a*/) -> bool
-                         {
-               if (h->GetSession() && h->GetSession()->GetSecurity() < SEC_GAMEMASTER && !h->IsConsole()) { h->PSendSysMessage("Insufficient privileges."); return true; }
-               sNpcBeastMaster->LoadSystem(true);
-               h->PSendSysMessage("Beastmaster configuration & pet lists reloaded.");
-               LOG_INFO("module", "Beastmaster: Reload triggered via .beastmaster reload");
-               return true; }, SEC_PLAYER, Console::Yes)};
+      ChatCommandBuilder("reload", BeastmasterReloadAdaptor, SEC_PLAYER, Console::Yes)};
+
   static ChatCommandTable root = {
-      ChatCommandBuilder("beastmaster", [](ChatHandler *h, char const * /*a*/) -> bool
-                         { return HandleBeastmasterCommand(h, ""); }, SEC_PLAYER, Console::Yes),
-      ChatCommandBuilder("bm", [](ChatHandler *h, char const * /*a*/) -> bool
-                         { return HandleBeastmasterCommand(h, ""); }, SEC_PLAYER, Console::Yes),
-      ChatCommandBuilder("beastmaster", beastmasterSub), ChatCommandBuilder("petname", petnameSub)};
+      ChatCommandBuilder("beastmaster", BeastmasterSummonAdaptor, SEC_PLAYER, Console::Yes), // main command to summon NPC
+      ChatCommandBuilder("bm", BeastmasterSummonAdaptor, SEC_PLAYER, Console::Yes),          // short alias
+      ChatCommandBuilder("beastmaster", beastmasterSub),                                     // subcommands (.beastmaster reload)
+      ChatCommandBuilder("petname", petnameSub)};                                            // pet name utilities
   return root;
 }
 
@@ -1469,42 +1489,23 @@ bool BeastMaster_CommandScript::HandleBeastmasterCommand(
 class BeastmasterLoginNotice_PlayerScript : public PlayerScript
 {
 public:
-  BeastmasterLoginNotice_PlayerScript()
-      : PlayerScript("BeastmasterLoginNotice_PlayerScript") {}
+  BeastmasterLoginNotice_PlayerScript() : PlayerScript("BeastmasterLoginNotice_PlayerScript") {}
 
-  void OnLogin(Player *player) {
-    ChatCommandBuilder("beastmaster", HandleBeastmasterCommand, SEC_PLAYER, Console::No),
-    ChatCommandBuilder("beastmaster", beastmasterSub),
-    ChatCommandBuilder("petname", petnameTable)
-  };
-  if (!sConfigMgr->GetOption<bool>("BeastMaster.Enable", true))
-    return;
-
-  // Optionally restrict to hunters if config says so
-  if (sConfigMgr->GetOption<bool>("BeastMaster.HunterOnly", true) &&
-      player->getClass() != CLASS_HUNTER)
-    return;
-
-  ChatHandler ch(player->GetSession());
-  std::string msg =
-      sConfigMgr->GetOption<std::string>("BeastMaster.LoginMessage", "");
-  if (!msg.empty())
-    ch.PSendSysMessage("%s", msg.c_str());
-  else
-    ch.PSendSysMessage("|cff00ff00[Beastmaster]|r Use |cff00ffff.bm|r or "
-                       "|cff00ffff.beastmaster|r to summon the Beastmaster "
-                       "NPC and manage your pets!");
-
-  // If player is a GM, show extra info
-  if (player->GetSession()->GetSecurity() >= SEC_GAMEMASTER)
+  void OnLogin(Player *player) override
   {
-    ch.PSendSysMessage(
-        "|cffffa500[GM Notice]|r You can also use |cff00ffff.npc add "
-        "601026|r to spawn the Beastmaster NPC anywhere, and "
-        "|cff00ffff.npc save|r to make it permanent.");
+    if (!sConfigMgr->GetOption<bool>("BeastMaster.Enable", true))
+      return;
+    if (!sConfigMgr->GetOption<bool>("BeastMaster.ShowLoginNotice", true))
+      return;
+
+    ChatHandler ch(player->GetSession());
+    std::string msg = sConfigMgr->GetOption<std::string>("BeastMaster.LoginMessage", "");
+    if (!msg.empty())
+      ch.PSendSysMessage("%s", msg.c_str());
+    else
+      ch.PSendSysMessage("|cff00ff00[Beastmaster]|r Use |cff00ffff.beastmaster|r (alias |cff00ffff.bm|r) to summon the Beastmaster NPC and manage your pets!");
   }
-}
-}
+};
 ;
 
 void Addmod_npc_beastmasterScripts()
