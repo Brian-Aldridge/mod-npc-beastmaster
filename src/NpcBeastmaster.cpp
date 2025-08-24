@@ -181,7 +181,9 @@ static time_t sProfanityListMTime = 0;
 static time_t GetFileMTime(std::string_view path)
 {
   struct stat statbuf;
-  if (stat(path.c_str(), &statbuf) == 0)
+  // string_view not guaranteed null-terminated; copy to std::string
+  std::string p(path);
+  if (stat(p.c_str(), &statbuf) == 0)
     return statbuf.st_mtime;
   return 0;
 }
@@ -189,7 +191,7 @@ static time_t GetFileMTime(std::string_view path)
 static std::set<uint8> ParseAllowedRaces(std::string_view csv)
 {
   std::set<uint8> result;
-  std::stringstream ss(csv);
+  std::stringstream ss(std::string(csv));
   std::string item;
   while (std::getline(ss, item, ','))
   {
@@ -209,7 +211,7 @@ static std::set<uint8> ParseAllowedRaces(std::string_view csv)
 static std::set<uint8> ParseAllowedClasses(std::string_view csv)
 {
   std::set<uint8> result;
-  std::stringstream ss(csv);
+  std::stringstream ss(std::string(csv));
   std::string item;
   while (std::getline(ss, item, ','))
   {
@@ -259,7 +261,7 @@ static bool IsProfane(std::string_view name)
   if (!sConfigMgr->GetOption<bool>("BeastMaster.ProfanityFilter", true))
     return false;
   LoadProfanityListIfNeeded();
-  std::string lower = name;
+  std::string lower{name};
   std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
   for (auto const &bad : sProfanityList)
     if (lower.find(bad) != std::string::npos)
@@ -274,13 +276,13 @@ static bool IsValidPetName(std::string_view name)
   if (std::isspace(name.front()) || std::isspace(name.back()))
     return false;
   static const std::regex allowed("^[A-Za-z][A-Za-z \\-']*[A-Za-z]$");
-  return std::regex_match(name, allowed);
+  return std::regex_match(std::string(name), allowed);
 }
 
 static std::set<uint32> ParseEntryList(std::string_view csv)
 {
   std::set<uint32> result;
-  std::stringstream ss(csv);
+  std::stringstream ss(std::string(csv));
   std::string item;
   while (std::getline(ss, item, ','))
   {
@@ -1332,27 +1334,37 @@ public:
 };
 
 // Define GetCommands outside the class body
-Acore::ChatCommands::ChatCommandTable
-BeastMaster_CommandScript::GetCommands() const
+Acore::ChatCommands::ChatCommandTable BeastMaster_CommandScript::GetCommands() const
 {
   using namespace Acore::ChatCommands;
-  static ChatCommandTable petnameTable = {
-      {"rename", HandlePetnameRenameCommand, SEC_PLAYER, Console::No},
-      {"cancel", HandlePetnameCancelCommand, SEC_PLAYER, Console::No}};
-  static ChatCommandTable beastmasterSub = {
-      {"reload", [](ChatHandler *handler, const char * /*args*/)
-       {
-          if (handler->GetSession()->GetSecurity() < SEC_GAMEMASTER && !handler->IsConsole()) {
-            handler->PSendSysMessage("Insufficient privileges.");
-            return true;
-          }
-          sNpcBeastMaster->LoadSystem(true);
-          handler->PSendSysMessage("Beastmaster configuration & pet lists reloaded.");
-          LOG_INFO("module", "Beastmaster: Reload triggered via .beastmaster reload");
-          return true; }, SEC_PLAYER, Console::Yes}};
-  return {{"beastmaster", beastmasterSub},
+  static ChatCommandTable petnameTable =
+      {
+          {"rename", HandlePetnameRenameCommand, SEC_PLAYER, Console::No},
+          {"cancel", HandlePetnameCancelCommand, SEC_PLAYER, Console::No}};
+
+  // Sub-table for .beastmaster (with reload)
+  static ChatCommandTable beastmasterSub =
+      {
+          {"reload", [](ChatHandler *handler, const char * /*args*/)
+           {
+             if (handler->GetSession()->GetSecurity() < SEC_GAMEMASTER && !handler->IsConsole())
+             {
+               handler->PSendSysMessage("Insufficient privileges.");
+               return true;
+             }
+             sNpcBeastMaster->LoadSystem(true);
+             handler->PSendSysMessage("Beastmaster configuration & pet lists reloaded.");
+             LOG_INFO("module", "Beastmaster: Reload triggered via .beastmaster reload");
+             return true;
+           },
+           SEC_PLAYER, Console::Yes}};
+
+  static ChatCommandTable root =
+      {
+          {"beastmaster", beastmasterSub},
           {"beastmaster", HandleBeastmasterCommand, SEC_PLAYER, Console::No},
           {"petname", petnameTable}};
+  return root;
 }
 
 // Implement the new handlers:
