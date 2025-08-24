@@ -34,7 +34,8 @@ class Creature;
  * PetInfo
  * Structure to hold information about pets.
  */
-struct PetInfo {
+struct PetInfo
+{
   uint32 entry;
   std::string name;
   uint32 family;
@@ -48,7 +49,8 @@ struct PetInfo {
  * Handles pet adoption, tracked pets, menu logic, and thread-safe session
  * cache.
  */
-class NpcBeastmaster {
+class NpcBeastmaster
+{
   NpcBeastmaster() = default;
   ~NpcBeastmaster() = default;
 
@@ -102,16 +104,13 @@ private:
   void HandleDeletePet(Player *player, Creature *creature, uint32 entry);
 
   // Sorts pets by name (utility).
-  void SortPetsByName(std::vector<PetInfo> &normalPets) {
+  void SortPetsByName(std::vector<PetInfo> &normalPets)
+  {
     std::sort(
         normalPets.begin(), normalPets.end(),
-        [](const PetInfo &a, const PetInfo &b) { return a.name < b.name; });
+        [](const PetInfo &a, const PetInfo &b)
+        { return a.name < b.name; });
   }
-
-  std::mutex trackedPetsCacheMutex;
-  std::unordered_map<uint64,
-                     std::vector<std::tuple<uint32, std::string, std::string>>>
-      trackedPetsCache;
 };
 
 #define sNpcBeastMaster NpcBeastmaster::instance()

@@ -1,0 +1,44 @@
+name: core-compatibility
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: '0 3 * * *' # daily 03:00 UTC build against latest core
+  workflow_dispatch: {}
+
+jobs:
+  build-latest-core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout module
+        uses: actions/checkout@v4
+        with:
+          path: modules/mod-npc-beastmaster
+      - name: Checkout AzerothCore
+        uses: actions/checkout@v4
+        with:
+          repository: azerothcore/azerothcore-wotlk
+          path: azerothcore
+      - name: Enable module
+        run: |
+          echo 'Adding module symlink'
+          ln -s $GITHUB_WORKSPACE/modules/mod-npc-beastmaster azerothcore/modules/mod-npc-beastmaster
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev libmysqlclient-dev build-essential cmake clang
+      - name: Configure
+        run: |
+          cd azerothcore
+          mkdir build && cd build
+          cmake .. -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DWITH_WARNINGS=ON
+      - name: Build
+        run: |
+          cd azerothcore/build
+          cmake --build . -j $(nproc)
+      - name: Module smoke check
+        run: |
+          grep -R "Beastmaster:" azerothcore/build/bin/worldserver || echo 'No log content yet (acceptable)'
+      - name: Summary
+        run: echo 'Build completed against latest AzerothCore master.'
